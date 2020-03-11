@@ -5,14 +5,19 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
+import javax.inject.Inject;
 
 import org.kie.kogito.Application;
 import org.kie.kogito.dmn.rest.DMNEvaluationErrorException;
+import org.kie.addons.monitoring.kafka.tracing.TracingEventCollector;
 
 @Path("/$nameURL$")
 public class DMNRestResourceTemplate {
 
     Application application;
+
+    @Inject
+    TracingEventCollector tracingService;
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
@@ -20,6 +25,7 @@ public class DMNRestResourceTemplate {
     public Object dmn(java.util.Map<String, Object> variables) {
         org.kie.kogito.decision.DecisionModel decision = application.decisionModels().getDecisionModel("$modelNamespace$", "$modelName$");
         org.kie.kogito.dmn.rest.DMNResult result = new org.kie.kogito.dmn.rest.DMNResult(decision.evaluateAll(decision.newContext(variables)));
+        tracingService.handleEvent(result);
         if (!result.hasErrors()) {
             return result.getDmnContext();
         } else {
