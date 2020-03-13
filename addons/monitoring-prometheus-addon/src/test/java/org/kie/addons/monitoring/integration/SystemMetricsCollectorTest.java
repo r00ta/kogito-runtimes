@@ -64,8 +64,8 @@ public class SystemMetricsCollectorTest {
         IntStream.range(0, mapExceptionRepetition.get("Exception")).forEach(x -> SystemMetricsCollector.registerException(handler, "Exception"));
 
         // Assert
-        assertEquals(mapExceptionRepetition.get("400"), getLabelsValue("api_http_stacktrace_exceptions", handler, "NoSuchElement").intValue());
-        assertEquals(mapExceptionRepetition.get("404"), getLabelsValue("api_http_stacktrace_exceptions", handler, "Exception").intValue());
+        assertEquals(mapExceptionRepetition.get("NoSuchElement"), getLabelsValue("api_http_stacktrace_exceptions", handler, "NoSuchElement").intValue());
+        assertEquals(mapExceptionRepetition.get("Exception"), getLabelsValue("api_http_stacktrace_exceptions", handler, "Exception").intValue());
     }
 
     @Test
@@ -89,10 +89,10 @@ public class SystemMetricsCollectorTest {
     }
 
     private double getQuantile(String name, String labelValue, double q) {
-        return registry.getSampleValue(name, new String[]{"handler", "quantile"}, new String[]{labelValue, Collector.doubleToGoString(q)}).doubleValue();
+        return registry.getSampleValue(name, new String[]{"endpoint", "quantile"}, new String[]{labelValue, Collector.doubleToGoString(q)}).doubleValue();
     }
 
     private Double getLabelsValue(String name, String handler, String identifier) {
-        return registry.getSampleValue(name, new String[]{"handler", "identifier"}, new String[]{handler, identifier});
+        return registry.getSampleValue(name, new String[]{"endpoint", "identifier"}, new String[]{handler, identifier});
     }
 }

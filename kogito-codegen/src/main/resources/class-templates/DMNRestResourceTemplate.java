@@ -10,6 +10,7 @@ import javax.inject.Inject;
 import org.kie.kogito.Application;
 import org.kie.kogito.dmn.rest.DMNEvaluationErrorException;
 import org.kie.addons.monitoring.kafka.tracing.TracingEventCollector;
+import org.kie.kogito.dmn.rest.DMNResult;
 
 @Path("/$nameURL$")
 public class DMNRestResourceTemplate {
@@ -26,18 +27,21 @@ public class DMNRestResourceTemplate {
         org.kie.kogito.decision.DecisionModel decision = application.decisionModels().getDecisionModel("$modelNamespace$", "$modelName$");
         org.kie.kogito.dmn.rest.DMNResult result = new org.kie.kogito.dmn.rest.DMNResult(decision.evaluateAll(decision.newContext(variables)));
         tracingService.handleEvent(result);
-        if (!result.hasErrors()) {
-            return result.getDmnContext();
-        } else {
-            throw new DMNEvaluationErrorException(result);
-        }
+        return extractContextIfSucceded(result);
     }
 
     @javax.ws.rs.ext.Provider
     public static class DMNEvaluationErrorExceptionMapper implements javax.ws.rs.ext.ExceptionMapper<org.kie.kogito.dmn.rest.DMNEvaluationErrorException> {
-
         public javax.ws.rs.core.Response toResponse(org.kie.kogito.dmn.rest.DMNEvaluationErrorException e) {
             return javax.ws.rs.core.Response.status(javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR).entity(e.getResult()).build();
+        }
+    }
+
+    private Object extractContextIfSucceded(DMNResult result){
+        if (!result.hasErrors()) {
+            return result.getDmnContext();
+        } else {
+            throw new DMNEvaluationErrorException(result);
         }
     }
 }
