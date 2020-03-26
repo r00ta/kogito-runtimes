@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import io.quarkus.arc.deployment.GeneratedBeanBuildItem;
@@ -50,7 +51,9 @@ import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexView;
 import org.jboss.jandex.Indexer;
 import org.jboss.jandex.MethodInfo;
+import org.jboss.logmanager.Level;
 import org.kie.api.builder.model.KieModuleModel;
+import org.kie.internal.jci.CompilationProblem;
 import org.kie.internal.kogito.codegen.Generated;
 import org.kie.internal.kogito.codegen.VariableInfo;
 import org.kie.kogito.Model;
@@ -63,13 +66,17 @@ import org.kie.kogito.codegen.di.CDIDependencyInjectionAnnotator;
 import org.kie.kogito.codegen.process.ProcessCodegen;
 import org.kie.kogito.codegen.process.persistence.PersistenceGenerator;
 import org.kie.kogito.codegen.rules.IncrementalRuleCodegen;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class KogitoAssetsProcessor {
 
+    private static final String generatedDashboardsDir = "/target/resources/";
+    private static final Logger logger = LoggerFactory.getLogger(KogitoAssetsProcessor.class);
     private final transient String generatedClassesDir = System.getProperty("quarkus.debug.generated-classes-dir");
     private final transient String appPackageName = "org.kie.kogito.app";
     private final transient String persistenceFactoryClass = "org.kie.kogito.persistence.KogitoProcessInstancesFactory";
-    private final transient String metricsClass = "org.kie.addons.monitoring.rest.MetricsResource";
+    private final transient String metricsClass = "org.kie.kogito.monitoring.rest.MetricsResource";
 
     @BuildStep
     CapabilityBuildItem capability() {
@@ -171,6 +178,10 @@ public class KogitoAssetsProcessor {
         Collection<GeneratedFile> generatedFiles = appGen.generate();
 
         Collection<GeneratedFile> javaFiles = generatedFiles.stream().filter( f -> f.relativePath().endsWith( ".java" ) ).collect( Collectors.toCollection( ArrayList::new ));
+        Collection<GeneratedFile> resourceFiles = generatedFiles.stream().filter( f -> f.getType() == GeneratedFile.Type.RESOURCE ).collect( Collectors.toCollection( ArrayList::new ));
+
+        String resourcePath = Paths.get(projectPath.toString()).toString() + generatedDashboardsDir;
+        writeResourceFiles(resourcePath, resourceFiles);
 
         if (!javaFiles.isEmpty()) {
 
@@ -218,6 +229,16 @@ public class KogitoAssetsProcessor {
 
         }
 
+    }
+
+    private void writeResourceFiles(String projectPath, Collection<GeneratedFile> resourceFiles){
+        resourceFiles.forEach(f -> {
+            try {
+                writeGeneratedFile(f, projectPath);
+            } catch (IOException e) {
+                logger.warn(String.format("Could not write resource file %s", f.toString()), e);
+            }
+        });
     }
 
     private Path getProjectPath(Path archiveLocation) {
@@ -275,6 +296,11 @@ public class KogitoAssetsProcessor {
             CompilationResult result, Path projectPath) throws IOException {
         if (result.getErrors().length > 0) {
             StringBuilder errorInfo = new StringBuilder();
+            for (CompilationProblem compilationProblem : result.getErrors()) {
+                errorInfo.append(compilationProblem.toString());
+                errorInfo.append("\n");
+                log.log(Level.ERROR, compilationProblem.toString());
+            }
             Arrays.stream(result.getErrors()).forEach(cp -> errorInfo.append(cp.toString()));
             throw new IllegalStateException(errorInfo.toString());
         }
@@ -312,30 +338,31 @@ public class KogitoAssetsProcessor {
 
         boolean usePersistence = combinedIndexBuildItem.getIndex()
                 .getClassByName(createDotName(persistenceFactoryClass)) != null;
+        boolean useMonitoring = combinedIndexBuildItem.getIndex()
+                .getClassByName(createDotName(metricsClass)) != null;
 
         GeneratorContext context = GeneratorContext.ofResourcePath(projectPath.resolve("src/main/resources").toFile());
         context.withBuildContext(new QuarkusKogitoBuildContext(className -> {
                 DotName classDotName = createDotName(className);
                 return !combinedIndexBuildItem.getIndex().getAnnotations(classDotName).isEmpty() || combinedIndexBuildItem.getIndex().getClassByName(classDotName) != null;
-                
+
         }));
 
         ApplicationGenerator appGen = new ApplicationGenerator(appPackageName, new File(projectPath.toFile(), "target"))
                 .withDependencyInjection(new CDIDependencyInjectionAnnotator())
                 .withPersistence(usePersistence)
-                .withMonitoring(combinedIndexBuildItem.getIndex()
-                        .getClassByName(createDotName(metricsClass)) != null)
+                .withMonitoring(useMonitoring)
                 .withGeneratorContext(context);
 
         boolean isDirectory = projectPath.toFile().isDirectory();
-        addProcessGenerator( projectPath, usePersistence, appGen, isDirectory );
-        addRuleGenerator( projectPath, appGen, isDirectory );
-        addDecisionGenerator( projectPath, appGen, isDirectory );
+        addProcessGenerator( projectPath, usePersistence, appGen, isDirectory);
+        addRuleGenerator( projectPath, appGen, isDirectory, useMonitoring );
+        addDecisionGenerator( projectPath, appGen, isDirectory, useMonitoring );
 
         return appGen;
     }
 
-    private void addRuleGenerator( Path projectPath, ApplicationGenerator appGen, boolean isDirectory ) throws IOException {
+    private void addRuleGenerator( Path projectPath, ApplicationGenerator appGen, boolean isDirectory, boolean useMonitoring ) throws IOException {
         Path moduleXmlPath = projectPath.resolve("src/main/resources").resolve( KieModuleModelImpl.KMODULE_JAR_PATH);
         KieModuleModel kieModuleModel = null;
         if ( Files.exists(moduleXmlPath)) {
@@ -353,6 +380,7 @@ public class KogitoAssetsProcessor {
 
         appGen.withGenerator(generator)
                 .withKModule(kieModuleModel)
+                .withMonitoring(useMonitoring)
                 .withClassLoader(Thread.currentThread().getContextClassLoader());
     }
 
@@ -366,12 +394,13 @@ public class KogitoAssetsProcessor {
                 .withClassLoader(Thread.currentThread().getContextClassLoader());
     }
 
-    private void addDecisionGenerator( Path projectPath, ApplicationGenerator appGen, boolean isDirectory ) throws IOException {
+    private void addDecisionGenerator( Path projectPath, ApplicationGenerator appGen, boolean isDirectory, boolean useMonitoring ) throws IOException {
         DecisionCodegen generator = isDirectory ?
                 DecisionCodegen.ofPath(projectPath.resolve("src/main/resources")) :
                 DecisionCodegen.ofJar(projectPath);
 
-        appGen.withGenerator( generator );
+        appGen.withGenerator( generator )
+                .withMonitoring(useMonitoring);
     }
 
     private String toRuntimeSource(String className) {
@@ -394,6 +423,7 @@ public class KogitoAssetsProcessor {
         if (location == null) {
             return;
         }
+
         String generatedClassFile = f.relativePath().replace("src/main/java", "");
         Files.write(
                 pathOf(location, generatedClassFile),
