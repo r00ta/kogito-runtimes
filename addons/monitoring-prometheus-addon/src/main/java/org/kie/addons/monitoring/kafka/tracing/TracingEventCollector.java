@@ -10,12 +10,12 @@ import java.util.UUID;
 
 import javax.enterprise.context.ApplicationScoped;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.cloudevents.v1.CloudEventBuilder;
 import io.cloudevents.v1.CloudEventImpl;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.subjects.PublishSubject;
 import org.eclipse.microprofile.reactive.messaging.Outgoing;
+import org.kie.addons.monitoring.kafka.tracing.types.DMNResultDTO;
 import org.kie.kogito.dmn.rest.DMNResult;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -33,15 +33,18 @@ public class TracingEventCollector {
             LOG.trace("TracingEventCollector::handleEvent");
 
             Map<String, Object> dataMap = new HashMap<>();
-            dataMap.put("result", result.getDmnContext());
+
+            DMNResultDTO resultDto = new DMNResultDTO(result);
+
+            dataMap.put("result", resultDto);
 
             CloudEventImpl<Map<String, Object>> cloudEvent =
                     CloudEventBuilder.<Map<String, Object>>builder()
                             .withType("String")
                             .withId(UUID.randomUUID().toString())
                             .withSource(URI.create(String.format("%s/%s",
-                                                                 "Chupa",
-                                                                 "Chupaahahah")
+                                                                 result.getNamespace(),
+                                                                 result.getModelName())
                             ))
                             .withData(dataMap)
                             .build();
