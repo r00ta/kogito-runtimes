@@ -10,8 +10,15 @@ import org.kie.dmn.api.core.DMNDecisionResult;
 import org.kie.kogito.dmn.rest.DMNResult;
 
 public class DMNResultDTO {
+
     @JsonProperty("decisions")
     public List<DecisionResultDto> decisions;
+
+    @JsonProperty("evaluationId")
+    public String evaluationId;
+
+    @JsonProperty("evaluationDate")
+    public String evaluationDate;
 
     @JsonProperty("context")
     public Map<String, Object> context;
@@ -22,8 +29,10 @@ public class DMNResultDTO {
     @JsonProperty("modelName")
     public String modelName;
 
-    public DMNResultDTO(DMNResult result){
+    public DMNResultDTO(String evaluationId, DMNResult result){
+        this.evaluationId = evaluationId;
         this.decisions = result.getDecisionResults().stream().map(x -> new DecisionResultDto(x)).collect(Collectors.toList());
+        this.evaluationDate = java.time.LocalDateTime.now().toString();
         this.context = result.getContext().getAll();
         this.modelNamespace = result.getNamespace();
         this.modelName = result.getModelName();

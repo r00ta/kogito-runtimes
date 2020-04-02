@@ -34,7 +34,8 @@ public class TracingEventCollector {
 
             Map<String, Object> dataMap = new HashMap<>();
 
-            DMNResultDTO resultDto = new DMNResultDTO(result);
+            String evaluationId = UUID.randomUUID().toString();
+            DMNResultDTO resultDto = new DMNResultDTO(evaluationId, result);
 
             dataMap.put("result", resultDto);
 
