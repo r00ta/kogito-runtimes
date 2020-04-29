@@ -99,7 +99,7 @@ public class DecisionCodegen extends AbstractGenerator {
 
     private static List<DMNModel> parseDecisions(Collection<Resource> resources) throws IOException {
         DMNRuntime dmnRuntime = DMNRuntimeBuilder.fromDefaults()
-                                                 .setRootClassLoader(null)
+                                                 .setRootClassLoader(Thread.currentThread().getContextClassLoader())
                                                  .buildConfiguration()
                                                  .fromResources(resources)
                                                  .getOrElseThrow(e -> new RuntimeException("Error compiling DMN model(s)", e));
