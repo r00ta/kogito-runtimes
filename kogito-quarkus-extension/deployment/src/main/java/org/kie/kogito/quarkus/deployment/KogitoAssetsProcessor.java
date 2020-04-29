@@ -76,14 +76,15 @@ public class KogitoAssetsProcessor {
     private final transient String persistenceFactoryClass = "org.kie.kogito.persistence.KogitoProcessInstancesFactory";
     private final transient String metricsClass = "org.kie.kogito.monitoring.rest.MetricsResource";
 
+
     @BuildStep
     CapabilityBuildItem capability() {
-        return new CapabilityBuildItem(Capabilities.KOGITO);
+        return new CapabilityBuildItem("kogito");
     }
 
     @BuildStep
     FeatureBuildItem featureBuildItem() {
-        return new FeatureBuildItem(FeatureBuildItem.KOGITO);
+        return new FeatureBuildItem("kogito");
     }
 
     public void generatePersistenceInfo(ArchiveRootBuildItem root,
@@ -107,6 +108,8 @@ public class KogitoAssetsProcessor {
             }
         }
 
+        GeneratorContext context = buildContext(projectPath, index);
+
         Collection<ClassInfo> modelClasses = index
                 .getAllKnownImplementors(createDotName(Model.class.getCanonicalName()));
 
@@ -117,6 +120,7 @@ public class KogitoAssetsProcessor {
                 parameters);
         persistenceGenerator.setDependencyInjection(new CDIDependencyInjectionAnnotator());
         persistenceGenerator.setPackageName(appPackageName);
+        persistenceGenerator.setContext(context);
 
         Collection<GeneratedFile> generatedFiles = persistenceGenerator.generate();
 
@@ -205,9 +209,13 @@ public class KogitoAssetsProcessor {
                     launchMode, resource, curateOutcomeBuildItem);
 
             reflectiveClass.produce(
+                    new ReflectiveClassBuildItem(true, true, "org.kie.kogito.event.AbstractDataEvent"));
+            reflectiveClass.produce(
                     new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.AbstractProcessDataEvent"));
             reflectiveClass.produce(
                     new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.ProcessInstanceDataEvent"));
+            reflectiveClass.produce(
+                    new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.VariableInstanceDataEvent"));
             reflectiveClass.produce(
                     new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.impl.ProcessInstanceEventBody"));
             reflectiveClass.produce(
@@ -215,12 +223,14 @@ public class KogitoAssetsProcessor {
             reflectiveClass.produce(
                     new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.impl.ProcessErrorEventBody"));
             reflectiveClass.produce(
+                    new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.impl.VariableInstanceEventBody"));
+            reflectiveClass.produce(
                     new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.UserTaskInstanceDataEvent"));
             reflectiveClass.produce(
                     new ReflectiveClassBuildItem(true, true, "org.kie.kogito.services.event.impl.UserTaskInstanceEventBody"));
 
             Collection<ClassInfo> dataEvents = index
-                    .getAllKnownSubclasses(createDotName("org.kie.kogito.services.event.AbstractProcessDataEvent"));
+                    .getAllKnownSubclasses(createDotName("org.kie.kogito.event.AbstractDataEvent"));
 
             dataEvents.forEach(c -> reflectiveClass.produce(
                     new ReflectiveClassBuildItem(true, true, c.name().toString())));
@@ -258,6 +268,7 @@ public class KogitoAssetsProcessor {
 
         JavaCompiler javaCompiler = JavaParserCompiler.getCompiler();
         JavaCompilerSettings compilerSettings = javaCompiler.createDefaultSettings();
+        compilerSettings.addOption("-proc:none"); // force disable annotation processing
         compilerSettings.addClasspath(root.getArchiveLocation().toString());
         if (appModel != null) {
             for (AppDependency i : appModel.getUserDependencies()) {
@@ -339,12 +350,7 @@ public class KogitoAssetsProcessor {
         boolean useMonitoring = combinedIndexBuildItem.getIndex()
                 .getClassByName(createDotName(metricsClass)) != null;
 
-        GeneratorContext context = GeneratorContext.ofResourcePath(projectPath.resolve("src/main/resources").toFile());
-        context.withBuildContext(new QuarkusKogitoBuildContext(className -> {
-                DotName classDotName = createDotName(className);
-                return !combinedIndexBuildItem.getIndex().getAnnotations(classDotName).isEmpty() || combinedIndexBuildItem.getIndex().getClassByName(classDotName) != null;
-
-        }));
+        GeneratorContext context = buildContext(projectPath, combinedIndexBuildItem.getIndex());
 
         ApplicationGenerator appGen = new ApplicationGenerator(appPackageName, new File(projectPath.toFile(), "target"))
                 .withDependencyInjection(new CDIDependencyInjectionAnnotator())
@@ -464,6 +470,17 @@ public class KogitoAssetsProcessor {
             }
         }
         return DotName.createComponentized(lastDollarName, name, true);
+    }
+
+    private GeneratorContext buildContext(Path projectPath, IndexView index) {
+    	GeneratorContext context = GeneratorContext.ofResourcePath(projectPath.resolve("src/main/resources").toFile());
+        context.withBuildContext(new QuarkusKogitoBuildContext(className -> {
+                DotName classDotName = createDotName(className);
+                return !index.getAnnotations(classDotName).isEmpty() || index.getClassByName(classDotName) != null;
+
+        }));
+
+        return context;
     }
 
 }

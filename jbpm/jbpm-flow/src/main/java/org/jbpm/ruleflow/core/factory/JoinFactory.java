@@ -21,10 +21,9 @@ import org.jbpm.workflow.core.Node;
 import org.jbpm.workflow.core.NodeContainer;
 import org.jbpm.workflow.core.node.Join;
 
-/**
- *
- */
 public class JoinFactory extends NodeFactory {
+
+    public static final String METHOD_TYPE = "type";
 
     public JoinFactory(RuleFlowNodeContainerFactory nodeContainerFactory, NodeContainer nodeContainer, long id) {
         super(nodeContainerFactory, nodeContainer, id);
@@ -33,23 +32,24 @@ public class JoinFactory extends NodeFactory {
     protected Node createNode() {
         return new Join();
     }
-    
+
     protected Join getJoin() {
-    	return (Join) getNode();
+        return (Join) getNode();
     }
 
+    @Override
     public JoinFactory name(String name) {
-        getNode().setName(name);
+        super.name(name);
         return this;
     }
 
     public JoinFactory type(int type) {
-    	getJoin().setType(type);
+        getJoin().setType(type);
         return this;
     }
-    
+
     public JoinFactory type(String n) {
-    	getJoin().setN(n);
+        getJoin().setN(n);
         return this;
     }
 

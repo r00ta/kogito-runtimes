@@ -31,9 +31,11 @@ import org.jbpm.serverless.workflow.api.end.End;
 import org.jbpm.serverless.workflow.api.events.EventDefinition;
 import org.jbpm.serverless.workflow.api.functions.Function;
 import org.jbpm.serverless.workflow.parser.util.ServerlessWorkflowUtils;
+import org.jbpm.serverless.workflow.parser.util.WorkflowAppContext;
 import org.jbpm.workflow.core.DroolsAction;
 import org.jbpm.workflow.core.NodeContainer;
 import org.jbpm.workflow.core.impl.ConnectionImpl;
+import org.jbpm.workflow.core.impl.ConstraintImpl;
 import org.jbpm.workflow.core.impl.DroolsConsequenceAction;
 import org.jbpm.workflow.core.impl.ExtendedNodeImpl;
 import org.jbpm.workflow.core.node.*;
@@ -46,7 +48,7 @@ import java.util.*;
 public class ServerlessWorkflowFactory {
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerlessWorkflowFactory.class);
 
-    protected static final String EOL = System.getProperty( "line.separator" );
+    private static final String EOL = System.getProperty("line.separator");
     private static final String DEFAULT_WORKFLOW_ID = "serverless";
     private static final String DEFAULT_WORKFLOW_NAME = "workflow";
     private static final String DEFAULT_WORKFLOW_VERSION = "1.0";
@@ -55,44 +57,53 @@ public class ServerlessWorkflowFactory {
     private static final String DEFAULT_VAR = "Var";
     private static final String JSON_NODE = "com.fasterxml.jackson.databind.JsonNode";
     private static final String DEFAULT_WORKFLOW_VAR = "workflowdata";
-    private static final Set<String> DEFAULT_IMPORTS = new HashSet<String>(Arrays.asList(JSON_NODE));
+    private static final String UNIQUE_ID_PARAM = "UniqueId";
+    private static final String DEFAULT_SERVICE_IMPL = "Java";
+    private static final String SERVICE_INTERFACE_KEY = "interface";
+    private static final String SERVICE_OPERATION_KEY = "operation";
+    private static final String SERVICE_IMPL_KEY = "implementation";
+
+    private WorkflowAppContext workflowAppContext;
+
+    public ServerlessWorkflowFactory(WorkflowAppContext workflowAppContext) {
+        this.workflowAppContext = workflowAppContext;
+    }
 
     public RuleFlowProcess createProcess(Workflow workflow) {
         RuleFlowProcess process = new RuleFlowProcess();
 
-        if(workflow.getId() != null && !workflow.getId().isEmpty()) {
+        if (workflow.getId() != null && !workflow.getId().isEmpty()) {
             process.setId(workflow.getId());
         } else {
             LOGGER.info("setting default id {}", DEFAULT_WORKFLOW_ID);
             process.setId(DEFAULT_WORKFLOW_ID);
         }
 
-        if(workflow.getName() != null && !workflow.getName().isEmpty()) {
+        if (workflow.getName() != null && !workflow.getName().isEmpty()) {
             process.setName(workflow.getName());
         } else {
             LOGGER.info("setting default name {}", DEFAULT_WORKFLOW_NAME);
-            process.setId(DEFAULT_WORKFLOW_NAME);
+            process.setName(DEFAULT_WORKFLOW_NAME);
         }
 
-        if(workflow.getVersion() != null && !workflow.getVersion().isEmpty()) {
+        if (workflow.getVersion() != null && !workflow.getVersion().isEmpty()) {
             process.setVersion(workflow.getVersion());
         } else {
             LOGGER.info("setting default version {}", DEFAULT_WORKFLOW_VERSION);
             process.setVersion(DEFAULT_WORKFLOW_VERSION);
         }
 
-        if(workflow.getMetadata() != null && workflow.getMetadata().get("package") != null) {
+        if (workflow.getMetadata() != null && workflow.getMetadata().get("package") != null) {
             process.setPackageName(workflow.getMetadata().get("package"));
         } else {
             process.setPackageName(DEFAULT_PACKAGE_NAME);
         }
 
-        process.setImports(DEFAULT_IMPORTS);
         process.setAutoComplete(true);
         process.setVisibility(DEFAULT_VISIBILITY);
 
         // add workflow data var
-        processVar(DEFAULT_WORKFLOW_VAR, process);
+        processVar(DEFAULT_WORKFLOW_VAR, JsonNode.class, process);
 
         return process;
     }
@@ -134,14 +145,13 @@ public class ServerlessWorkflowFactory {
         return endNode;
     }
 
-    public EndNode messageEndNode(long id, Workflow workflow, End stateEnd, NodeContainer nodeContainer) {
+    public EndNode messageEndNode(long id, String name, Workflow workflow, End stateEnd, NodeContainer nodeContainer) {
         EndNode endNode = new EndNode();
         endNode.setTerminate(false);
         endNode.setId(id);
+        endNode.setName(name);
 
         EventDefinition eventDef = ServerlessWorkflowUtils.getWorkflowEventFor(workflow, stateEnd.getProduceEvent().getNameRef());
-
-        endNode.setName(eventDef.getName());
 
         endNode.setMetaData("TriggerRef", eventDef.getSource());
         endNode.setMetaData("TriggerType", "ProduceMessage");
@@ -176,14 +186,28 @@ public class ServerlessWorkflowFactory {
         subProcessNode.setName(name);
         subProcessNode.setProcessId(calledId);
         subProcessNode.setWaitForCompletion(waitForCompletion);
+        subProcessNode.setIndependent(true);
+
+        VariableScope variableScope = new VariableScope();
+        subProcessNode.addContext(variableScope);
+        subProcessNode.setDefaultContext(variableScope);
+
+        Map<String, String> inputOtuputTypes = new HashMap<>();
+        inputOtuputTypes.put(DEFAULT_WORKFLOW_VAR, JSON_NODE);
+        subProcessNode.setMetaData("BPMN.InputTypes", inputOtuputTypes);
+        subProcessNode.setMetaData("BPMN.OutputTypes", inputOtuputTypes);
+
+        // parent and sub processes have process var "workflowdata"
+        subProcessNode.addInMapping(DEFAULT_WORKFLOW_VAR, DEFAULT_WORKFLOW_VAR);
+        subProcessNode.addOutMapping(DEFAULT_WORKFLOW_VAR, DEFAULT_WORKFLOW_VAR);
 
         nodeContainer.addNode(subProcessNode);
 
         return subProcessNode;
     }
 
-    private void addMessageEndNodeAction(EndNode endNode, String variable, String messageType){
-        List<DroolsAction> actions = new ArrayList<DroolsAction>();
+    public void addMessageEndNodeAction(EndNode endNode, String variable, String messageType) {
+        List<DroolsAction> actions = new ArrayList<>();
 
         actions.add(new DroolsConsequenceAction("java",
                 "org.drools.core.process.instance.impl.WorkItemImpl workItem = new org.drools.core.process.instance.impl.WorkItemImpl();" + EOL +
@@ -198,7 +222,7 @@ public class ServerlessWorkflowFactory {
         endNode.setActions(ExtendedNodeImpl.EVENT_NODE_ENTER, actions);
     }
 
-    private void addTriggerToStartNode(StartNode startNode, String triggerEventType) {
+    public void addTriggerToStartNode(StartNode startNode, String triggerEventType) {
         EventTrigger trigger = new EventTrigger();
         EventTypeFilter eventFilter = new EventTypeFilter();
         eventFilter.setType(triggerEventType);
@@ -218,8 +242,8 @@ public class ServerlessWorkflowFactory {
         scriptNode.setName(name);
 
         scriptNode.setAction(new DroolsConsequenceAction());
-        ((DroolsConsequenceAction)scriptNode.getAction()).setConsequence(script);
-        ((DroolsConsequenceAction)scriptNode.getAction()).setDialect(JavaDialect.ID);
+        ((DroolsConsequenceAction) scriptNode.getAction()).setConsequence(script);
+        ((DroolsConsequenceAction) scriptNode.getAction()).setDialect(JavaDialect.ID);
 
         nodeContainer.addNode(scriptNode);
 
@@ -236,16 +260,16 @@ public class ServerlessWorkflowFactory {
         workItemNode.setWork(work);
 
         work.setName("Service Task");
-        work.setParameter("Interface", function.getMetadata().get("interface"));
-        work.setParameter("Operation", function.getMetadata().get("operation"));
-        work.setParameter("interfaceImplementationRef", function.getMetadata().get("interface"));
-        work.setParameter("operationImplementationRef", function.getMetadata().get("operation"));
+        work.setParameter("Interface", ServerlessWorkflowUtils.resolveFunctionMetadata(function, SERVICE_INTERFACE_KEY, workflowAppContext));
+        work.setParameter("Operation", ServerlessWorkflowUtils.resolveFunctionMetadata(function, SERVICE_OPERATION_KEY, workflowAppContext));
+        work.setParameter("interfaceImplementationRef", ServerlessWorkflowUtils.resolveFunctionMetadata(function, SERVICE_INTERFACE_KEY, workflowAppContext));
+        work.setParameter("operationImplementationRef", ServerlessWorkflowUtils.resolveFunctionMetadata(function, SERVICE_OPERATION_KEY, workflowAppContext));
         work.setParameter("ParameterType", JSON_NODE);
-        String metaImpl = function.getMetadata().get("implementation");
-        if(metaImpl == null) {
-            metaImpl = "Java";
+        String metaImpl = ServerlessWorkflowUtils.resolveFunctionMetadata(function, SERVICE_IMPL_KEY, workflowAppContext);
+        if (metaImpl == null || metaImpl.isEmpty()) {
+            metaImpl = DEFAULT_SERVICE_IMPL;
         }
-        work.setParameter("implementation", metaImpl);
+        work.setParameter(SERVICE_IMPL_KEY, metaImpl);
 
         workItemNode.addInMapping("Parameter", DEFAULT_WORKFLOW_VAR);
         workItemNode.addOutMapping("Result", DEFAULT_WORKFLOW_VAR);
@@ -256,10 +280,10 @@ public class ServerlessWorkflowFactory {
 
     }
 
-    public static void processVar(String name, RuleFlowProcess process) {
+    public void processVar(String varName, Class varType, RuleFlowProcess process) {
         Variable variable = new Variable();
-        variable.setName(name);
-        variable.setType(new ObjectDataType(JsonNode.class.getName()));
+        variable.setName(varName);
+        variable.setType(new ObjectDataType(varType.getName()));
         process.getVariableScope().getVariables().add(variable);
     }
 
@@ -271,10 +295,44 @@ public class ServerlessWorkflowFactory {
         subProcessNode.addContext(variableScope);
         subProcessNode.setDefaultContext(variableScope);
         subProcessNode.setAutoComplete(true);
-
         nodeContainer.addNode(subProcessNode);
 
         return subProcessNode;
+    }
+
+
+    public Split splitNode(long id, String name, int type, NodeContainer nodeContainer) {
+        Split split = new Split();
+        split.setId(id);
+        split.setName(name);
+        split.setType(type);
+        split.setMetaData(UNIQUE_ID_PARAM, Long.toString(id));
+
+        nodeContainer.addNode(split);
+        return split;
+    }
+
+    public Join joinNode(long id, String name, int type, NodeContainer nodeContainer) {
+        Join join = new Join();
+        join.setId(id);
+        join.setName(name);
+        join.setType(type);
+        join.setMetaData(UNIQUE_ID_PARAM, Long.toString(id));
+
+        nodeContainer.addNode(join);
+        return join;
+    }
+
+    public ConstraintImpl splitConstraint(String name, String type, String dialect, String constraint, int priority, boolean isDefault) {
+        ConstraintImpl constraintImpl = new ConstraintImpl();
+        constraintImpl.setName(name);
+        constraintImpl.setType(type);
+        constraintImpl.setDialect(dialect);
+        constraintImpl.setConstraint(constraint);
+        constraintImpl.setPriority(priority);
+        constraintImpl.setDefault(isDefault);
+
+        return constraintImpl;
     }
 
     public void connect(long fromId, long toId, String uniqueId, NodeContainer nodeContainer) {
@@ -283,7 +341,7 @@ public class ServerlessWorkflowFactory {
         ConnectionImpl connection = new ConnectionImpl(
                 from, org.jbpm.workflow.core.Node.CONNECTION_DEFAULT_TYPE,
                 to, org.jbpm.workflow.core.Node.CONNECTION_DEFAULT_TYPE);
-        connection.setMetaData("UniqueId", uniqueId);
+        connection.setMetaData(UNIQUE_ID_PARAM, uniqueId);
     }
 
     public void validate(RuleFlowProcess process) {

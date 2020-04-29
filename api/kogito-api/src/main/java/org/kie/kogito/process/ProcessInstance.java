@@ -18,6 +18,7 @@ package org.kie.kogito.process;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.kie.api.runtime.process.WorkItemNotFoundException;
 import org.kie.kogito.process.workitem.Policy;
@@ -148,6 +149,12 @@ public interface ProcessInstance<T> {
     String businessKey();
     
     /**
+     * Returns optional description of this process instance
+     * @return description of the process instance
+     */
+    String description();
+    
+    /**
      * Returns process error in case process instance is in error state.
      * @return returns process error
      */
@@ -158,5 +165,7 @@ public interface ProcessInstance<T> {
     void cancelNodeInstance(String nodeInstanceId);
     
     void retriggerNodeInstance(String nodeInstanceId);
+        
+    Set<EventDescription<?>> events();
 
 }
