@@ -61,7 +61,7 @@ public class KogitoDMNScenarioRunnerHelper extends DMNScenarioRunnerHelper {
                                                  .map(FileSystemResource::new)
                                                  .collect(Collectors.toList());
             dmnRuntime = DMNRuntimeBuilder.fromDefaults()
-                                          .setRootClassLoader(null)
+                                          .setRootClassLoader(Thread.currentThread().getContextClassLoader())
                                           .buildConfiguration()
                                           .fromResources(resources)
                                           .getOrElseThrow(e -> new RuntimeException("Error initalizing DMNRuntime", e));
