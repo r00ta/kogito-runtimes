@@ -24,6 +24,8 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import javax.xml.namespace.QName;
+
 import org.kie.dmn.model.api.Decision;
 import org.kie.kogito.grafana.dmn.SupportedDecisionTypes;
 import org.kie.kogito.grafana.model.panel.PanelType;
@@ -71,15 +73,15 @@ public class GrafanaConfigurationWriter {
         }
 
         for (Decision decision : decisions) {
-            String type = decision.getVariable().getTypeRef().getLocalPart();
-            if (SupportedDecisionTypes.isSupported(type)) {
+            QName type = decision.getVariable().getTypeRef();
+            if (type != null && SupportedDecisionTypes.isSupported(type.getLocalPart())) {
                 jgrafana.addPanel(PanelType.GRAPH,
                                   "Decision " + decision.getName(),
                                   String.format("%s_dmn_result{endpoint = \"%s\", decision = \"%s\"}",
                                                 type,
                                                 endpoint,
                                                 decision.getName()),
-                                  SupportedDecisionTypes.getGrafanaFunction(type));
+                                  SupportedDecisionTypes.getGrafanaFunction(type.getLocalPart()));
             }
         }
 
