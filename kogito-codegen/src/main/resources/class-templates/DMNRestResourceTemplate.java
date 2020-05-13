@@ -30,6 +30,7 @@ public class DMNRestResourceTemplate {
         org.kie.kogito.dmn.rest.DMNResult result = new org.kie.kogito.dmn.rest.DMNResult("$modelNamespace$", "$modelName$", decision.evaluateAll(decision.newContext(variables)));
         if (tracing) {
             tracingService.handleEvent(result);
+            return extractContextIfSucceded(result);
         }
         return extractContextIfSucceded(result);
     }
