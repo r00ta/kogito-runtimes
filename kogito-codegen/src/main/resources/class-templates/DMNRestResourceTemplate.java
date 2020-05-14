@@ -28,10 +28,10 @@ public class DMNRestResourceTemplate {
     public Object dmn(@DefaultValue("true") @QueryParam("tracing") Boolean tracing, java.util.Map<String, Object> variables) {
         org.kie.kogito.decision.DecisionModel decision = application.decisionModels().getDecisionModel("$modelNamespace$", "$modelName$");
         org.kie.kogito.dmn.rest.DMNResult result = new org.kie.kogito.dmn.rest.DMNResult("$modelNamespace$", "$modelName$", decision.evaluateAll(decision.newContext(variables)));
-        if (tracing) {
-            tracingService.handleEvent(result);
+        if (!tracing) {
             return extractContextIfSucceded(result);
         }
+        tracingService.handleEvent(result);
         return extractContextIfSucceded(result);
     }
 
