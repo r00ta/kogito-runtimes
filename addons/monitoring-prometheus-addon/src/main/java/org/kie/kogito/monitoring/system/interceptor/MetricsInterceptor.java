@@ -20,6 +20,7 @@ import java.util.List;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerResponseContext;
 import javax.ws.rs.container.ContainerResponseFilter;
+import javax.ws.rs.core.MultivaluedMap;
 
 import org.kie.kogito.monitoring.system.metrics.SystemMetricsCollector;
 
@@ -29,6 +30,11 @@ public class MetricsInterceptor implements ContainerResponseFilter {
     public void filter(ContainerRequestContext requestContext,
                        ContainerResponseContext responseContext) {
         List<String> matchedUris = requestContext.getUriInfo().getMatchedURIs();
+        MultivaluedMap<String, String> pathParameters = requestContext.getUriInfo().getQueryParameters();
+        if (pathParameters.containsKey("tracing") && !Boolean.parseBoolean(pathParameters.getFirst("tracing"))){
+            return;
+        }
+
         if (!matchedUris.isEmpty()) {
             SystemMetricsCollector.registerStatusCodeRequest(matchedUris.get(0), String.valueOf(responseContext.getStatusInfo().getStatusCode()));
         } else // Log the number of requests that did not match any Uri -> 404 not found.
