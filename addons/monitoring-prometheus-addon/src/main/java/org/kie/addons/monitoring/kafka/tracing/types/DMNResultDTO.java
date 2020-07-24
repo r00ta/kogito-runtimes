@@ -32,7 +32,7 @@ public class DMNResultDTO {
     public DMNResultDTO(String evaluationId, DMNResult result){
         this.evaluationId = evaluationId;
         this.decisions = result.getDecisionResults().stream().map(x -> new DecisionResultDto(x)).collect(Collectors.toList());
-        this.evaluationDate = System.currentTimeMillis();
+        this.evaluationTimestamp = System.currentTimeMillis();
         this.context = result.getContext().getAll();
         this.modelNamespace = result.getNamespace();
         this.modelName = result.getModelName();
