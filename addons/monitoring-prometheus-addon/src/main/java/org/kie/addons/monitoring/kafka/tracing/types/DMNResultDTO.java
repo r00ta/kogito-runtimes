@@ -17,8 +17,8 @@ public class DMNResultDTO {
     @JsonProperty("evaluationId")
     public String evaluationId;
 
-    @JsonProperty("evaluationDate")
-    public String evaluationDate;
+    @JsonProperty("evaluationTimestamp")
+    public Long evaluationTimestamp;
 
     @JsonProperty("context")
     public Map<String, Object> context;
@@ -32,7 +32,7 @@ public class DMNResultDTO {
     public DMNResultDTO(String evaluationId, DMNResult result){
         this.evaluationId = evaluationId;
         this.decisions = result.getDecisionResults().stream().map(x -> new DecisionResultDto(x)).collect(Collectors.toList());
-        this.evaluationDate = java.time.LocalDateTime.now().toString();
+        this.evaluationDate = System.currentTimeMillis();
         this.context = result.getContext().getAll();
         this.modelNamespace = result.getNamespace();
         this.modelName = result.getModelName();
