@@ -99,7 +99,11 @@ pipeline {
         stage('Build Apps') {
             steps {
                 script {
-                    getMavenCommand('kogito-apps').run('clean install')
+                    getMavenCommand('kogito-apps')
+                        .withProperty('skip.ui.deps')
+                        .withProperty('skip.ui.build')
+                        .withProperty('formatter.skip')
+                        .run('clean install')
                 }
             }
             post {
